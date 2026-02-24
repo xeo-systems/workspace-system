@@ -39,14 +39,16 @@ lsof -i :6379 || true
 docker ps
 ```
 
-Option A (recommended): stop conflicting containers
+Option A (recommended): stop this repo’s containers and re-check ports
 
 ```bash
-docker stop workspace_pg workspace_redis || true
-docker rm workspace_pg workspace_redis || true
+docker compose down
+lsof -i :5432 || true
+lsof -i :6379 || true
+docker ps
 ```
 
-If other containers are binding these ports, stop those instead.
+If other containers are binding these ports, stop those specific containers.
 
 Option B (advanced): use alternate ports
 
@@ -80,7 +82,38 @@ export TOKEN="..."
 export ORG_ID="..."
 export WORKSPACE_ID="..."
 export INVITE_TOKEN="..."
+export MEMBERSHIP_ID="..."
 ```
+
+Capture variables (jq optional):
+
+```bash
+# if you have jq
+TOKEN=$(curl -s -X POST http://localhost:4000/auth/signup \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"owner@example.com","password":"password123","name":"Owner"}' | jq -r '.data.accessToken')
+
+ORG_ID=$(curl -s -X POST http://localhost:4000/orgs \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"name":"Acme","slug":"acme"}' | jq -r '.data.org.id')
+
+WORKSPACE_ID=$(curl -s -X POST http://localhost:4000/workspaces \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"orgId":"'$ORG_ID'","name":"Core","slug":"core"}' | jq -r '.data.workspace.id')
+
+INVITE_TOKEN=$(curl -s -X POST http://localhost:4000/orgs/$ORG_ID/invites \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"email":"invitee@example.com","roleName":"member"}' | jq -r '.data.token')
+
+# select the appropriate membership from the list
+MEMBERSHIP_ID=$(curl -s -X GET http://localhost:4000/orgs/$ORG_ID/members \
+  -H "Authorization: Bearer $TOKEN" | jq -r '.data.memberships[0].id')
+```
+
+If you don’t have `jq`, run the commands below and manually copy values into the exported variables.
 
 ```bash
 curl -s -X POST http://localhost:4000/auth/signup \
