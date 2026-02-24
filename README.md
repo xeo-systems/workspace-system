@@ -73,9 +73,8 @@ pnpm install
 cp .env.example .env
 pnpm prisma:migrate -- --name init
 pnpm prisma:seed
-# if port 4000 is in use, free it before starting the API
-lsof -ti :4000 | xargs kill
-lsof -ti :4000 | xargs kill -9
+# Ensure port 4000 is free before starting the API
+lsof -ti :4000 | xargs kill || true
 JWT_SECRET=replace_with_strong_secret pnpm dev
 JWT_SECRET=replace_with_strong_secret pnpm worker
 ```
