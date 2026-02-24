@@ -17,7 +17,7 @@ auditRouter.get(
     const cursor = typeof req.query.cursor === "string" ? req.query.cursor : null;
 
     const rows = await prisma.auditLog.findMany({
-      where: { orgId: req.params.orgId } as any,
+      where: { orgId: req.params.orgId },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: limit + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {})
@@ -42,7 +42,7 @@ auditRouter.get(
     const cursor = typeof req.query.cursor === "string" ? req.query.cursor : null;
 
     const rows = await prisma.auditLog.findMany({
-      where: { workspaceId: req.params.workspaceId } as any,
+      where: { workspaceId: req.params.workspaceId },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: limit + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {})

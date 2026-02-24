@@ -76,7 +76,7 @@ app.get("/health", async (_req, res) => {
     await prisma.$queryRaw`SELECT 1`;
     await jobQueue.getJobCounts();
     res.json({ status: "ok" });
-  } catch (err) {
+  } catch {
     res.status(500).json({ status: "error" });
   }
 });

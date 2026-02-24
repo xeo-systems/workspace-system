@@ -53,7 +53,7 @@ jobsRouter.post(
           orgId,
           workspaceId: workspaceId ?? null,
           type,
-          payload: (payload ?? undefined) as any,
+          payload: (payload ?? undefined) as Prisma.InputJsonValue | undefined,
           idempotencyKey,
           status: "QUEUED",
           attempts: 0,

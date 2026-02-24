@@ -132,7 +132,7 @@ const auditWorker = new Worker(
         metadata: (data.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
         ip: data.ip ?? null,
         userAgent: data.userAgent ?? null
-      } as any
+      }
     });
 
     logger.info(
