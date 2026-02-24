@@ -82,6 +82,8 @@ JWT_SECRET=replace_with_strong_secret node --import tsx src/index.ts
 JWT_SECRET=replace_with_strong_secret node --import tsx src/worker.ts
 ```
 
+If you see `EPERM` when binding a port, run the above commands from a normal terminal session (some sandboxed environments disallow network binds).
+
 `.env.example` uses local dev defaults that match `docker-compose.yml`; change values for production.
 
 ## Minimal curl smoke test
