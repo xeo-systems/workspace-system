@@ -61,6 +61,12 @@ DATABASE_URL=postgresql://user:password@localhost:5433/database
 REDIS_URL=redis://localhost:6380
 ```
 
+Note: the API binds to port `4000` by default and will fail with `EADDRINUSE` if that port is already in use. Check before starting:
+
+```bash
+lsof -i :4000 || true
+```
+
 ```bash
 docker compose up -d
 pnpm install
