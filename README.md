@@ -78,8 +78,8 @@ PORT=${PORT:-4001}
 while lsof -i :$PORT >/dev/null 2>&1; do PORT=$((PORT+1)); done
 export PORT
 export API_BASE_URL="http://localhost:$PORT"
-JWT_SECRET=replace_with_strong_secret pnpm dev
-JWT_SECRET=replace_with_strong_secret pnpm worker
+JWT_SECRET=replace_with_strong_secret pnpm tsx src/index.ts
+JWT_SECRET=replace_with_strong_secret pnpm tsx src/worker.ts
 ```
 
 `.env.example` uses local dev defaults that match `docker-compose.yml`; change values for production.
