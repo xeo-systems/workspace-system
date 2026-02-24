@@ -61,11 +61,7 @@ DATABASE_URL=postgresql://user:password@localhost:5433/database
 REDIS_URL=redis://localhost:6380
 ```
 
-Note: the API binds to port `4000` by default. This guide uses `4001` to avoid conflicts. If you prefer the default, start the API with `PORT=4000` instead.
-
-```bash
-lsof -i :4001 || true
-```
+Note: the API binds to port `4000` by default. If that port is in use, it will automatically try the next ports until it finds a free one and log the final port.
 
 ```bash
 docker compose up -d
@@ -73,16 +69,16 @@ pnpm install
 cp .env.example .env
 pnpm prisma:migrate -- --name init
 pnpm prisma:seed
-# Pick a free port starting at 4001
-PORT=${PORT:-4001}
-while lsof -i :$PORT >/dev/null 2>&1; do PORT=$((PORT+1)); done
-export PORT
-export API_BASE_URL="http://localhost:$PORT"
+JWT_SECRET=replace_with_strong_secret pnpm dev
+JWT_SECRET=replace_with_strong_secret pnpm worker
+```
+
+If you see `EPERM` when binding a port, run the above commands from a normal terminal session (some sandboxed environments disallow network binds). You can also run:
+
+```bash
 JWT_SECRET=replace_with_strong_secret node --import tsx src/index.ts
 JWT_SECRET=replace_with_strong_secret node --import tsx src/worker.ts
 ```
-
-If you see `EPERM` when binding a port, run the above commands from a normal terminal session (some sandboxed environments disallow network binds).
 
 `.env.example` uses local dev defaults that match `docker-compose.yml`; change values for production.
 
@@ -91,7 +87,7 @@ If you see `EPERM` when binding a port, run the above commands from a normal ter
 Set variables:
 
 ```bash
-export API_BASE_URL="${API_BASE_URL:-http://localhost:4001}"
+export API_BASE_URL="http://localhost:4000"
 export TOKEN="..."
 export ORG_ID="..."
 export WORKSPACE_ID="..."
@@ -100,6 +96,8 @@ export MEMBERSHIP_ID="..."
 export OWNER_EMAIL="..."
 export INVITEE_EMAIL="..."
 ```
+
+If the API started on a different port (it logs `API listening on :PORT`), update `API_BASE_URL` accordingly.
 
 Capture variables (jq optional):
 
