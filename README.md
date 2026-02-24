@@ -69,6 +69,8 @@ JWT_SECRET=replace_with_strong_secret pnpm dev
 JWT_SECRET=replace_with_strong_secret pnpm worker
 ```
 
+`.env.example` uses local dev defaults that match `docker-compose.yml`; change values for production.
+
 ## Minimal curl smoke test
 
 Set variables:
