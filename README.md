@@ -84,11 +84,14 @@ JWT_SECRET=replace_with_strong_secret pnpm worker
 Set variables:
 
 ```bash
+export API_BASE_URL="http://localhost:4001"
 export TOKEN="..."
 export ORG_ID="..."
 export WORKSPACE_ID="..."
 export INVITE_TOKEN="..."
 export MEMBERSHIP_ID="..."
+export OWNER_EMAIL="..."
+export INVITEE_EMAIL="..."
 ```
 
 Capture variables (jq optional):
@@ -96,59 +99,65 @@ Capture variables (jq optional):
 ```bash
 # if you have jq
 command -v jq >/dev/null || { echo "jq is required for this block. Install jq or use the manual mode below."; exit 1; }
+API_BASE_URL="${API_BASE_URL:-http://localhost:4001}"
 TS=$(date +%s)
 OWNER_EMAIL="owner-$TS@example.com"
 INVITEE_EMAIL="invitee-$TS@example.com"
 
-TOKEN=$(curl -sfS -X POST http://localhost:4001/auth/signup \
+TOKEN=$(curl -sfS -X POST $API_BASE_URL/auth/signup \
   -H 'Content-Type: application/json' \
   -d '{"email":"'$OWNER_EMAIL'","password":"password123","name":"Owner"}' | jq -r '.data.accessToken')
 [ -n "$TOKEN" ] || { echo "Failed to capture TOKEN. Signup may have failed or parsing failed."; exit 1; }
 
-ORG_ID=$(curl -sfS -X POST http://localhost:4001/orgs \
+ORG_ID=$(curl -sfS -X POST $API_BASE_URL/orgs \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"name":"Acme","slug":"acme"}' | jq -r '.data.org.id')
 
-WORKSPACE_ID=$(curl -sfS -X POST http://localhost:4001/workspaces \
+WORKSPACE_ID=$(curl -sfS -X POST $API_BASE_URL/workspaces \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"orgId":"'$ORG_ID'","name":"Core","slug":"core"}' | jq -r '.data.workspace.id')
 
-INVITE_TOKEN=$(curl -sfS -X POST http://localhost:4001/orgs/$ORG_ID/invites \
+INVITE_TOKEN=$(curl -sfS -X POST $API_BASE_URL/orgs/$ORG_ID/invites \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"email":"'$INVITEE_EMAIL'","roleName":"member"}' | jq -r '.data.token')
 
 # select the appropriate membership from the list
-MEMBERSHIP_ID=$(curl -sfS -X GET http://localhost:4001/orgs/$ORG_ID/members \
+MEMBERSHIP_ID=$(curl -sfS -X GET $API_BASE_URL/orgs/$ORG_ID/members \
   -H "Authorization: Bearer $TOKEN" | jq -r '.data.memberships[0].id')
 ```
 
 If you don’t have `jq`, run the commands below and manually copy values into the exported variables.
 
 ```bash
-curl -s -X POST http://localhost:4001/auth/signup \
+API_BASE_URL="${API_BASE_URL:-http://localhost:4001}"
+TS=$(date +%s)
+OWNER_EMAIL="owner-$TS@example.com"
+INVITEE_EMAIL="invitee-$TS@example.com"
+
+curl -s -X POST $API_BASE_URL/auth/signup \
   -H 'Content-Type: application/json' \
-  -d '{"email":"owner@example.com","password":"password123","name":"Owner"}'
+  -d '{"email":"'$OWNER_EMAIL'","password":"password123","name":"Owner"}'
 ```
 
 ```bash
-curl -s -X POST http://localhost:4001/orgs \
+curl -s -X POST $API_BASE_URL/orgs \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"name":"Acme","slug":"acme"}'
 ```
 
 ```bash
-curl -s -X POST http://localhost:4001/workspaces \
+curl -s -X POST $API_BASE_URL/workspaces \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"orgId":"$ORG_ID","name":"Core","slug":"core"}'
 ```
 
 ```bash
-curl -s -X POST http://localhost:4001/jobs/enqueue \
+curl -s -X POST $API_BASE_URL/jobs/enqueue \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"orgId":"$ORG_ID","type":"echo","payload":{"msg":"hi"},"idempotencyKey":"abc"}'
@@ -157,7 +166,7 @@ curl -s -X POST http://localhost:4001/jobs/enqueue \
 Idempotency should be stable (second request returns existing job, not 500):
 
 ```bash
-curl -s -X POST http://localhost:4001/jobs/enqueue \
+curl -s -X POST $API_BASE_URL/jobs/enqueue \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"orgId":"$ORG_ID","type":"echo","payload":{"msg":"hi"},"idempotencyKey":"abc"}'
@@ -166,10 +175,10 @@ curl -s -X POST http://localhost:4001/jobs/enqueue \
 Invite double-accept should fail deterministically:
 
 ```bash
-curl -s -X POST http://localhost:4001/invites/accept \
+curl -s -X POST $API_BASE_URL/invites/accept \
   -H 'Content-Type: application/json' \
   -d '{"token":"$INVITE_TOKEN"}'
-curl -s -X POST http://localhost:4001/invites/accept \
+curl -s -X POST $API_BASE_URL/invites/accept \
   -H 'Content-Type: application/json' \
   -d '{"token":"$INVITE_TOKEN"}'
 ```
@@ -177,7 +186,7 @@ curl -s -X POST http://localhost:4001/invites/accept \
 Membership role changes require `members.manage` (403 otherwise):
 
 ```bash
-curl -s -X PATCH http://localhost:4001/memberships/$MEMBERSHIP_ID/roles \
+curl -s -X PATCH $API_BASE_URL/memberships/$MEMBERSHIP_ID/roles \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"roleIds":["$ROLE_ID"]}'
