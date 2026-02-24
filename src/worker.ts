@@ -5,6 +5,7 @@ import { prisma } from "./db/prisma.js";
 import { redisConfig } from "./config/redis.js";
 import { auditQueue } from "./queues/index.js";
 import { getEnv } from "./config/auth.js";
+import { logger } from "./lib/logger.js";
 
 getEnv();
 
@@ -18,8 +19,28 @@ const worker = new Worker(
     });
 
     if (!dbJob) {
+      logger.warn(
+        {
+          queue: "jobs",
+          jobId,
+          jobType: job.name
+        },
+        "job missing"
+      );
       return { ok: false };
     }
+
+    logger.info(
+      {
+        queue: "jobs",
+        jobId,
+        jobType: dbJob.type,
+        orgId: dbJob.orgId,
+        workspaceId: dbJob.workspaceId,
+        status: "RUNNING"
+      },
+      "job started"
+    );
 
     await prisma.job.update({
       where: { id: jobId },
@@ -50,6 +71,18 @@ const worker = new Worker(
         finishedAt: new Date()
       }
     });
+
+    logger.info(
+      {
+        queue: "jobs",
+        jobId,
+        jobType: dbJob.type,
+        orgId: dbJob.orgId,
+        workspaceId: dbJob.workspaceId,
+        status: "SUCCEEDED"
+      },
+      "job completed"
+    );
 
     void auditQueue
       .add("audit", {
@@ -102,17 +135,43 @@ const auditWorker = new Worker(
       } as any
     });
 
+    logger.info(
+      {
+        queue: "audit",
+        jobId: String(job.id),
+        orgId: data.orgId,
+        workspaceId: data.workspaceId,
+        status: "SUCCEEDED"
+      },
+      "audit persisted"
+    );
+
     return { ok: true };
   },
   { connection: { url: redisConfig.url } }
 );
 
 worker.on("completed", (job) => {
-  console.log(`Job completed: ${job.id}`);
+  logger.info(
+    {
+      queue: "jobs",
+      jobId: String(job.id),
+      status: "SUCCEEDED"
+    },
+    "job completed event"
+  );
 });
 
 worker.on("failed", async (job, err) => {
-  console.error(`Job failed: ${job?.id}`, err);
+  logger.error(
+    {
+      queue: "jobs",
+      jobId: String(job?.id),
+      status: "FAILED",
+      stack: err?.stack
+    },
+    "job failed"
+  );
   if (!job?.id) return;
   const jobId = String(job.id);
   const dbJob = await prisma.job.findUnique({ where: { id: jobId } });
@@ -144,11 +203,26 @@ worker.on("failed", async (job, err) => {
 });
 
 auditWorker.on("completed", (job) => {
-  console.log(`Audit completed: ${job.id}`);
+  logger.info(
+    {
+      queue: "audit",
+      jobId: String(job.id),
+      status: "SUCCEEDED"
+    },
+    "audit completed event"
+  );
 });
 
 auditWorker.on("failed", (job, err) => {
-  console.error(`Audit failed: ${job?.id}`, err);
+  logger.error(
+    {
+      queue: "audit",
+      jobId: String(job?.id),
+      status: "FAILED",
+      stack: err?.stack
+    },
+    "audit failed"
+  );
 });
 
 let shuttingDown = false;
