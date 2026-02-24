@@ -1,0 +1,11 @@
+.env
+.env.local
+.env.*.local
+node_modules
+.pnpm-store
+.next
+apps/web/.next
+dist
+coverage
+*.log
+.DS_Store

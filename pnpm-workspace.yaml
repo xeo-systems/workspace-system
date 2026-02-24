@@ -1,0 +1,8 @@
+ignoredBuiltDependencies:
+  - esbuild
+  - msgpackr-extract
+
+onlyBuiltDependencies:
+  - '@prisma/client'
+  - '@prisma/engines'
+  - prisma

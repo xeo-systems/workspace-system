@@ -1,0 +1,225 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  name      String?
+  passwordHash String   @default("")
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  audits    AuditLog[]
+  sessions  Session[]
+  memberships Membership[]
+  invitations Invitation[]
+}
+
+model Role {
+  id          String           @id @default(cuid())
+  name        String
+  description String?
+  scope       RbacScope @default(ORG)
+  orgId       String?
+  organization Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  permissions RolePermission[]
+  memberships MembershipRole[]
+
+  @@index([orgId])
+  @@unique([orgId, scope, name])
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  key         String           @unique @map("name")
+  description String?
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  orgId       String
+  workspaceId String?
+  actorUserId String?
+  actorType   String
+  action      String
+  entityType  String?
+  entityId    String?
+  metadata    Json?
+  ip          String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  workspace    Workspace?   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actorUser    User?        @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, createdAt])
+  @@index([workspaceId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+model Job {
+  id              String     @id @default(uuid())
+  orgId           String
+  workspaceId     String?
+  type            String
+  payload         Json?
+  idempotencyKey  String
+  status          JobStatus  @default(QUEUED)
+  attempts        Int        @default(0)
+  maxAttempts     Int        @default(1)
+  error           String?
+  result          Json?
+  createdAt       DateTime   @default(now())
+  startedAt       DateTime?
+  finishedAt      DateTime?
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  workspace    Workspace?   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, type, idempotencyKey])
+  @@index([orgId, createdAt])
+  @@index([status, createdAt])
+}
+
+model Session {
+  id               String   @id @default(cuid())
+  userId           String
+  refreshTokenHash String
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([refreshTokenHash])
+}
+
+enum MembershipScope {
+  ORG
+  WORKSPACE
+}
+
+enum RbacScope {
+  ORG
+  WORKSPACE
+}
+
+enum MembershipStatus {
+  ACTIVE
+  INVITED
+  DISABLED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+model Organization {
+  id          String       @id @default(cuid())
+  name        String
+  slug        String       @unique
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  workspaces  Workspace[]
+  memberships Membership[]
+  roles       Role[]
+  auditLogs   AuditLog[]
+  jobs        Job[]
+  invitations Invitation[]
+}
+
+model Workspace {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  slug           String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  memberships    Membership[]
+  auditLogs      AuditLog[]
+  jobs           Job[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+}
+
+model Membership {
+  id             String           @id @default(cuid())
+  userId         String
+  organizationId String
+  workspaceId    String?
+  scope          MembershipScope
+  status         MembershipStatus @default(ACTIVE)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  workspace    Workspace?   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  roles        MembershipRole[]
+
+  @@index([userId, organizationId])
+  @@index([workspaceId])
+  @@unique([userId, organizationId, workspaceId, scope])
+}
+
+model MembershipRole {
+  membershipId String
+  roleId       String
+  membership   Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([membershipId, roleId])
+}
+
+model Invitation {
+  id              String           @id @default(cuid())
+  orgId           String
+  email           String
+  tokenHash       String
+  roleName        String
+  roleScope       RbacScope
+  expiresAt       DateTime
+  status          InvitationStatus @default(PENDING)
+  createdByUserId String
+  createdAt       DateTime         @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdByUser User @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([email])
+  @@index([status])
+  @@unique([tokenHash])
+  @@unique([orgId, email, status])
+}
