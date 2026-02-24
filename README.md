@@ -27,6 +27,38 @@ This repository is a concise reference implementation of a multi‑tenant API wi
 
 ## Local setup
 
+### Port conflicts
+
+By default, this stack binds Postgres to `5432` and Redis to `6379`.
+
+Quick check:
+
+```bash
+lsof -i :5432 || true
+lsof -i :6379 || true
+docker ps
+```
+
+Option A (recommended): stop conflicting containers
+
+```bash
+docker stop workspace_pg workspace_redis || true
+docker rm workspace_pg workspace_redis || true
+```
+
+If other containers are binding these ports, stop those instead.
+
+Option B (advanced): use alternate ports
+
+This repo’s `docker-compose.yml` hardcodes `5432:5432` and `6379:6379`. If you need alternate ports, manually edit the compose file and update env values accordingly. Example:
+
+```
+POSTGRES_PORT=5433
+REDIS_PORT=6380
+DATABASE_URL=postgresql://user:password@localhost:5433/database
+REDIS_URL=redis://localhost:6380
+```
+
 ```bash
 docker compose up -d
 pnpm install
