@@ -26,6 +26,10 @@ This repository is a reference implementation of a multi-tenant backend with RBA
 - The API enqueues jobs; workers handle execution and transition status.
 - Job status changes are written by the worker only (RUNNING → SUCCEEDED/FAILED).
 
+## DB invariants
+
+- **Workspace memberships must belong to the same organization**: a composite foreign key enforces `Membership(workspaceId, organizationId)` → `Workspace(id, organizationId)` so tenant boundaries cannot be crossed by mismatched IDs.
+
 ## Key decisions
 
 - **Async audit** to avoid request‑path latency and to keep audit append‑only.

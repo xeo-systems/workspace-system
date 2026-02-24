@@ -169,6 +169,7 @@ model Workspace {
   auditLogs      AuditLog[]
   jobs           Job[]
 
+  @@unique([id, organizationId])
   @@unique([organizationId, slug])
   @@index([organizationId])
 }
@@ -185,7 +186,7 @@ model Membership {
 
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  workspace    Workspace?   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace    Workspace?   @relation(fields: [workspaceId, organizationId], references: [id, organizationId], onDelete: Cascade)
   roles        MembershipRole[]
 
   @@index([userId, organizationId])

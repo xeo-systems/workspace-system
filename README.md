@@ -39,31 +39,40 @@ JWT_SECRET=replace_with_strong_secret pnpm worker
 
 ## Minimal curl smoke test
 
+Set variables:
+
+```bash
+export TOKEN="..."
+export ORG_ID="..."
+export WORKSPACE_ID="..."
+export INVITE_TOKEN="..."
+```
+
 ```bash
 curl -s -X POST http://localhost:4000/auth/signup \
   -H 'Content-Type: application/json' \
-  -d '{"email":"user@example.com","password":"password123","name":"User"}'
+  -d '{"email":"owner@example.com","password":"password123","name":"Owner"}'
 ```
 
 ```bash
 curl -s -X POST http://localhost:4000/orgs \
   -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{"name":"Acme","slug":"acme"}'
 ```
 
 ```bash
 curl -s -X POST http://localhost:4000/workspaces \
   -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer <ACCESS_TOKEN>" \
-  -d '{"orgId":"<ORG_ID>","name":"Core","slug":"core"}'
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"orgId":"$ORG_ID","name":"Core","slug":"core"}'
 ```
 
 ```bash
 curl -s -X POST http://localhost:4000/jobs/enqueue \
   -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer <ACCESS_TOKEN>" \
-  -d '{"orgId":"<ORG_ID>","type":"echo","payload":{"msg":"hi"},"idempotencyKey":"abc"}'
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"orgId":"$ORG_ID","type":"echo","payload":{"msg":"hi"},"idempotencyKey":"abc"}'
 ```
 
 Idempotency should be stable (second request returns existing job, not 500):
@@ -71,8 +80,8 @@ Idempotency should be stable (second request returns existing job, not 500):
 ```bash
 curl -s -X POST http://localhost:4000/jobs/enqueue \
   -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer <ACCESS_TOKEN>" \
-  -d '{"orgId":"<ORG_ID>","type":"echo","payload":{"msg":"hi"},"idempotencyKey":"abc"}'
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"orgId":"$ORG_ID","type":"echo","payload":{"msg":"hi"},"idempotencyKey":"abc"}'
 ```
 
 Invite double-accept should fail deterministically:
@@ -80,19 +89,19 @@ Invite double-accept should fail deterministically:
 ```bash
 curl -s -X POST http://localhost:4000/invites/accept \
   -H 'Content-Type: application/json' \
-  -d '{"token":"<INVITE_TOKEN>"}'
+  -d '{"token":"$INVITE_TOKEN"}'
 curl -s -X POST http://localhost:4000/invites/accept \
   -H 'Content-Type: application/json' \
-  -d '{"token":"<INVITE_TOKEN>"}'
+  -d '{"token":"$INVITE_TOKEN"}'
 ```
 
 Membership role changes require `members.manage` (403 otherwise):
 
 ```bash
-curl -s -X PATCH http://localhost:4000/memberships/<MEMBERSHIP_ID>/roles \
+curl -s -X PATCH http://localhost:4000/memberships/$MEMBERSHIP_ID/roles \
   -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer <ACCESS_TOKEN>" \
-  -d '{"roleIds":["<ROLE_ID>"]}'
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"roleIds":["$ROLE_ID"]}'
 ```
 
 ## Web UI (apps/web)
