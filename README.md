@@ -95,27 +95,33 @@ Capture variables (jq optional):
 
 ```bash
 # if you have jq
-TOKEN=$(curl -s -X POST http://localhost:4001/auth/signup \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"owner@example.com","password":"password123","name":"Owner"}' | jq -r '.data.accessToken')
+command -v jq >/dev/null || { echo "jq is required for this block. Install jq or use the manual mode below."; exit 1; }
+TS=$(date +%s)
+OWNER_EMAIL="owner-$TS@example.com"
+INVITEE_EMAIL="invitee-$TS@example.com"
 
-ORG_ID=$(curl -s -X POST http://localhost:4001/orgs \
+TOKEN=$(curl -sfS -X POST http://localhost:4001/auth/signup \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"'$OWNER_EMAIL'","password":"password123","name":"Owner"}' | jq -r '.data.accessToken')
+[ -n "$TOKEN" ] || { echo "Failed to capture TOKEN. Signup may have failed or parsing failed."; exit 1; }
+
+ORG_ID=$(curl -sfS -X POST http://localhost:4001/orgs \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"name":"Acme","slug":"acme"}' | jq -r '.data.org.id')
 
-WORKSPACE_ID=$(curl -s -X POST http://localhost:4001/workspaces \
+WORKSPACE_ID=$(curl -sfS -X POST http://localhost:4001/workspaces \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"orgId":"'$ORG_ID'","name":"Core","slug":"core"}' | jq -r '.data.workspace.id')
 
-INVITE_TOKEN=$(curl -s -X POST http://localhost:4001/orgs/$ORG_ID/invites \
+INVITE_TOKEN=$(curl -sfS -X POST http://localhost:4001/orgs/$ORG_ID/invites \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"email":"invitee@example.com","roleName":"member"}' | jq -r '.data.token')
+  -d '{"email":"'$INVITEE_EMAIL'","roleName":"member"}' | jq -r '.data.token')
 
 # select the appropriate membership from the list
-MEMBERSHIP_ID=$(curl -s -X GET http://localhost:4001/orgs/$ORG_ID/members \
+MEMBERSHIP_ID=$(curl -sfS -X GET http://localhost:4001/orgs/$ORG_ID/members \
   -H "Authorization: Bearer $TOKEN" | jq -r '.data.memberships[0].id')
 ```
 
