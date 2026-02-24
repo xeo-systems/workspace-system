@@ -3,6 +3,7 @@ import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "./db/prisma.js";
 import { auditQueue, jobQueue } from "./queues/index.js";
 import { authConfig } from "./config/auth.js";
@@ -42,6 +43,11 @@ type AuthedRequest = express.Request & {
     workspaceId: string | null;
     type: string;
     status: string;
+  };
+  membership?: {
+    id: string;
+    organizationId: string;
+    scope: "ORG" | "WORKSPACE";
   };
 };
 
@@ -665,83 +671,125 @@ app.post("/invites/accept", async (req, res) => {
 
   const tokenHash = hashToken(parsed.data.token);
 
-  const invite = await prisma.invitation.findFirst({
-    where: { tokenHash, status: "PENDING" }
-  });
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const invite = await tx.invitation.findFirst({
+        where: { tokenHash }
+      });
 
-  if (!invite) {
-    return res.status(404).json({ error: "Invite not found" });
-  }
-
-  if (invite.expiresAt < new Date()) {
-    await prisma.invitation.update({
-      where: { id: invite.id },
-      data: { status: "EXPIRED" }
-    });
-    return res.status(400).json({ error: "Invite expired" });
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { email: invite.email }
-  });
-
-  if (!user) {
-    return res.status(400).json({ error: "User not found for invite email" });
-  }
-
-  let membership = await prisma.membership.findFirst({
-    where: {
-      userId: user.id,
-      organizationId: invite.orgId,
-      scope: "ORG"
-    }
-  });
-
-  if (!membership) {
-    membership = await prisma.membership.create({
-      data: {
-        userId: user.id,
-        organizationId: invite.orgId,
-        scope: "ORG",
-        status: "ACTIVE"
+      if (!invite) {
+        throw new Error("INVITE_NOT_FOUND");
       }
+
+      if (invite.status !== "PENDING") {
+        throw new Error("INVITE_ALREADY_HANDLED");
+      }
+
+      if (invite.expiresAt < new Date()) {
+        await tx.invitation.update({
+          where: { id: invite.id },
+          data: { status: "EXPIRED" }
+        });
+        throw new Error("INVITE_EXPIRED");
+      }
+
+      const user = await tx.user.findUnique({
+        where: { email: invite.email }
+      });
+
+      if (!user) {
+        throw new Error("INVITE_USER_NOT_FOUND");
+      }
+
+      const role = await tx.role.findFirst({
+        where: { orgId: null, scope: "ORG", name: invite.roleName }
+      });
+
+      if (!role) {
+        throw new Error("INVITE_ROLE_NOT_FOUND");
+      }
+
+      const claim = await tx.invitation.updateMany({
+        where: { id: invite.id, status: "PENDING" },
+        data: { status: "ACCEPTED" }
+      });
+
+      if (claim.count === 0) {
+        throw new Error("INVITE_ALREADY_HANDLED");
+      }
+
+      let membership = await tx.membership.findFirst({
+        where: {
+          userId: user.id,
+          organizationId: invite.orgId,
+          scope: "ORG"
+        }
+      });
+
+      if (!membership) {
+        membership = await tx.membership.create({
+          data: {
+            userId: user.id,
+            organizationId: invite.orgId,
+            scope: "ORG",
+            status: "ACTIVE"
+          }
+        });
+      } else if (membership.status !== "ACTIVE") {
+        membership = await tx.membership.update({
+          where: { id: membership.id },
+          data: { status: "ACTIVE" }
+        });
+      }
+
+      await tx.membershipRole.upsert({
+        where: {
+          membershipId_roleId: { membershipId: membership.id, roleId: role.id }
+        },
+        update: {},
+        create: { membershipId: membership.id, roleId: role.id }
+      });
+
+      return {
+        invite,
+        user,
+        membership
+      };
     });
+
+    void enqueueAudit({
+      action: "invite.accepted",
+      actorType: "user",
+      actorUserId: result.user.id,
+      orgId: result.invite.orgId,
+      entityType: "invitation",
+      entityId: result.invite.id,
+      metadata: { email: result.invite.email, roleName: result.invite.roleName },
+      ip: req.ip ?? null,
+      userAgent: req.header("user-agent") ?? null
+    });
+
+    return res.json({ data: { membershipId: result.membership.id } });
+  } catch (err) {
+    if (err instanceof Error) {
+      if (err.message === "INVITE_NOT_FOUND") {
+        return res.status(404).json({ error: "Invite not found" });
+      }
+      if (err.message === "INVITE_EXPIRED") {
+        return res.status(400).json({ error: "Invite expired" });
+      }
+      if (err.message === "INVITE_USER_NOT_FOUND") {
+        return res.status(400).json({ error: "User not found for invite email" });
+      }
+      if (err.message === "INVITE_ROLE_NOT_FOUND") {
+        return res.status(400).json({ error: "Role not found" });
+      }
+      if (err.message === "INVITE_ALREADY_HANDLED") {
+        return res.status(409).json({ error: "Invite already handled" });
+      }
+    }
+    return res.status(500).json({ error: "Failed to accept invite" });
   }
-
-  const role = await prisma.role.findFirst({
-    where: { orgId: null, scope: "ORG", name: invite.roleName }
-  });
-
-  if (!role) {
-    return res.status(400).json({ error: "Role not found" });
-  }
-
-  await prisma.membershipRole.upsert({
-    where: {
-      membershipId_roleId: { membershipId: membership.id, roleId: role.id }
-    },
-    update: {},
-    create: { membershipId: membership.id, roleId: role.id }
-  });
-
-  await prisma.invitation.update({
-    where: { id: invite.id },
-    data: { status: "ACCEPTED" }
-  });
-
-  void enqueueAudit({
-    action: "invite.accepted",
-    actorType: "user",
-    actorUserId: user.id,
-    orgId: invite.orgId,
-    entityType: "invitation",
-    entityId: invite.id,
-    metadata: { email: invite.email, roleName: invite.roleName },
-    ip: req.ip ?? null,
-    userAgent: req.header("user-agent") ?? null
-  });
-
-  return res.json({ data: { membershipId: membership.id } });
 });
 
 app.get(
@@ -779,44 +827,46 @@ app.get(
   }
 );
 
-app.patch("/memberships/:id/roles", requireAuth, async (req: AuthedRequest, res) => {
+async function loadOrgMembershipForRoleUpdate(
+  req: AuthedRequest,
+  res: express.Response,
+  next: express.NextFunction
+) {
+  const membershipId = req.params.id;
+  const membership = await prisma.membership.findUnique({
+    where: { id: membershipId }
+  });
+  if (!membership) {
+    return res.status(404).json({ error: "Membership not found" });
+  }
+  if (membership.scope !== "ORG") {
+    return res.status(400).json({ error: "Only org memberships can be updated" });
+  }
+  req.membership = {
+    id: membership.id,
+    organizationId: membership.organizationId,
+    scope: membership.scope
+  };
+  req.body = { ...(req.body ?? {}), orgId: membership.organizationId };
+  return next();
+}
+
+app.patch(
+  "/memberships/:id/roles",
+  requireAuth,
+  loadOrgMembershipForRoleUpdate,
+  requirePermission("members.manage", {
+    scope: "ORG",
+    idSource: { source: "body", key: "orgId" }
+  }),
+  async (req: AuthedRequest, res) => {
     const parsed = updateMembershipRolesSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
     }
 
     const membershipId = req.params.id;
-    const membership = await prisma.membership.findUnique({
-      where: { id: membershipId }
-    });
-    if (!membership) {
-      return res.status(404).json({ error: "Membership not found" });
-    }
-
-    if (membership.scope !== "ORG") {
-      return res.status(400).json({ error: "Only org memberships can be updated" });
-    }
-
-    const hasManagePermission = await prisma.membershipRole.findFirst({
-      where: {
-        membership: {
-          userId: req.user!.id,
-          organizationId: membership.organizationId,
-          scope: "ORG",
-          status: "ACTIVE"
-        },
-        role: {
-          scope: "ORG",
-          permissions: {
-            some: { permission: { key: "members.manage" } }
-          }
-        }
-      }
-    });
-
-    if (!hasManagePermission) {
-      return res.status(403).json({ error: "Forbidden" });
-    }
+    const membership = req.membership!;
 
     const roles = await prisma.role.findMany({
       where: { id: { in: parsed.data.roleIds }, scope: "ORG", orgId: null }
@@ -851,7 +901,8 @@ app.patch("/memberships/:id/roles", requireAuth, async (req: AuthedRequest, res)
     });
 
     return res.json({ data: { ok: true } });
-  });
+  }
+);
 
 app.post("/workspaces", requireAuth, async (req: AuthedRequest, res) => {
   const parsed = createWorkspaceSchema.safeParse(req.body);
@@ -1103,26 +1154,31 @@ app.post(
       }
     }
 
-    const existing = await prisma.job.findUnique({
-      where: { orgId_type_idempotencyKey: { orgId, type, idempotencyKey } }
-    });
-
-    if (existing) {
-      return res.json({ data: { job: existing } });
-    }
-
-    const job = await prisma.job.create({
-      data: {
-        orgId,
-        workspaceId: workspaceId ?? null,
-        type,
-        payload: (payload ?? undefined) as any,
-        idempotencyKey,
-        status: "QUEUED",
-        attempts: 0,
-        maxAttempts: maxAttempts ?? 1
+    let job;
+    try {
+      job = await prisma.job.create({
+        data: {
+          orgId,
+          workspaceId: workspaceId ?? null,
+          type,
+          payload: (payload ?? undefined) as any,
+          idempotencyKey,
+          status: "QUEUED",
+          attempts: 0,
+          maxAttempts: maxAttempts ?? 1
+        }
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+        const existing = await prisma.job.findUnique({
+          where: { orgId_type_idempotencyKey: { orgId, type, idempotencyKey } }
+        });
+        if (existing) {
+          return res.json({ data: { job: existing } });
+        }
       }
-    });
+      throw err;
+    }
 
     await jobQueue.add(type, { payload }, { jobId: job.id, attempts: job.maxAttempts });
 
