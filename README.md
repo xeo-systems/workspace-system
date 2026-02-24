@@ -74,7 +74,8 @@ cp .env.example .env
 pnpm prisma:migrate -- --name init
 pnpm prisma:seed
 lsof -i :4000 || true
-# If something is listening on 4000, stop it (or use a different PORT below).
+# Start the API (use exactly one line below).
+# If 4000 is in use, use the PORT=4001 line instead of the default.
 JWT_SECRET=replace_with_strong_secret pnpm dev
 PORT=4001 JWT_SECRET=replace_with_strong_secret pnpm dev
 JWT_SECRET=replace_with_strong_secret pnpm worker
