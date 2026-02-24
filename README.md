@@ -73,7 +73,12 @@ pnpm install
 cp .env.example .env
 pnpm prisma:migrate -- --name init
 pnpm prisma:seed
-PORT=4001 JWT_SECRET=replace_with_strong_secret pnpm dev
+# Pick a free port starting at 4001
+PORT=${PORT:-4001}
+while lsof -i :$PORT >/dev/null 2>&1; do PORT=$((PORT+1)); done
+export PORT
+export API_BASE_URL="http://localhost:$PORT"
+JWT_SECRET=replace_with_strong_secret pnpm dev
 JWT_SECRET=replace_with_strong_secret pnpm worker
 ```
 
@@ -84,7 +89,7 @@ JWT_SECRET=replace_with_strong_secret pnpm worker
 Set variables:
 
 ```bash
-export API_BASE_URL="http://localhost:4001"
+export API_BASE_URL="${API_BASE_URL:-http://localhost:4001}"
 export TOKEN="..."
 export ORG_ID="..."
 export WORKSPACE_ID="..."
